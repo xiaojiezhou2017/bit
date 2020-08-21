@@ -1,1 +1,4 @@
-export { StencilExtension } from './stencil.extension';
+import { StencilExtension } from './stencil.extension';
+
+export { StencilExtension };
+export default StencilExtension;

@@ -5,6 +5,7 @@ import { LoggerAspect, LoggerMain } from '@teambit/logger';
 import { Workspace, WorkspaceAspect } from '@teambit/workspace';
 import { GraphqlAspect, GraphqlMain } from '@teambit/graphql';
 import { merge } from 'lodash';
+import UIAspect, { UiMain } from '@teambit/ui';
 
 import { TestsResult } from './tests-results';
 import { TestCmd } from './test.cmd';
@@ -13,11 +14,18 @@ import { TesterService } from './tester.service';
 import { TesterTask } from './tester.task';
 import { testerSchema } from './tester.graphql';
 
+export const OnTestsChanged = 'OnTestsChanged';
+
 export type TesterExtensionConfig = {
   /**
    * regex of the text environment.
    */
   testRegex: string;
+
+  /**
+   * determine whether to watch on start.
+   */
+  watchOnStart: boolean;
 };
 
 export type TesterOptions = {
@@ -35,11 +43,16 @@ export type TesterOptions = {
    * initiate the tester on given env.
    */
   env?: string;
+
+  /**
+   * decide whether test output should be silenced.
+   */
+  quiet?: boolean;
 };
 
 export class TesterMain {
   static runtime = MainRuntime;
-  static dependencies = [CLIAspect, EnvsAspect, WorkspaceAspect, LoggerAspect, GraphqlAspect];
+  static dependencies = [CLIAspect, EnvsAspect, WorkspaceAspect, LoggerAspect, GraphqlAspect, UIAspect];
 
   constructor(
     /**
@@ -73,11 +86,6 @@ export class TesterMain {
     return results;
   }
 
-  /**
-   * watch all components for changes and test upon each.
-   */
-  watch() {}
-
   getTestsResults(component: Component): TestsResult | undefined {
     const entry = component.state.aspects.get(TesterAspect.id);
     // TODO: type is ok, talk to @david about it
@@ -89,6 +97,7 @@ export class TesterMain {
     const defaults = {
       watch: false,
       debug: false,
+      quiet: false,
     };
 
     return merge(defaults, options);
@@ -99,14 +108,17 @@ export class TesterMain {
      * default test regex for which files tester to apply on.
      */
     testRegex: '*.{spec,test}.{js,jsx,ts,tsx}',
+
+    watchOnStart: true,
   };
 
   static async provider(
-    [cli, envs, workspace, loggerAspect, graphql]: [CLIMain, EnvsMain, Workspace, LoggerMain, GraphqlMain],
+    [cli, envs, workspace, loggerAspect, graphql, ui]: [CLIMain, EnvsMain, Workspace, LoggerMain, GraphqlMain, UiMain],
     config: TesterExtensionConfig
   ) {
     const logger = loggerAspect.createLogger(TesterAspect.id);
-    const testerService = new TesterService(workspace, config.testRegex, logger);
+
+    const testerService = new TesterService(workspace, config.testRegex, logger, graphql.pubsub);
     envs.registerService(testerService);
 
     const tester = new TesterMain(envs, workspace, testerService, new TesterTask(TesterAspect.id));
@@ -114,8 +126,13 @@ export class TesterMain {
     if (workspace && !workspace.consumer.isLegacy) {
       cli.unregister('test');
       cli.register(new TestCmd(tester, workspace, logger));
+      ui.registerOnStart(async ({ pattern }) => {
+        if (!config.watchOnStart) return;
+        const components = await workspace.byPattern(pattern);
+        await tester.test(components, { watch: true, debug: true, quiet: true });
+      });
     }
-    graphql.register(testerSchema(tester));
+    graphql.register(testerSchema(tester, graphql));
 
     return tester;
   }

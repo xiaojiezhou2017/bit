@@ -2626,6 +2626,11 @@
                 "name": "jest.tester.ts",
                 "relativePath": "jest.tester.ts",
                 "test": false
+            },
+            {
+                "name": "watch-plugin.js",
+                "relativePath": "watch-plugin.js",
+                "test": false
             }
         ],
         "mainFile": "index.ts",

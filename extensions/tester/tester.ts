@@ -80,7 +80,15 @@ export interface Tester {
   id: string;
 
   /**
+   * on test run complete. (applies only during watch)
+   * @param callback
+   */
+  onTestRunComplete?(callback: CallbackFn): Promise<void>;
+
+  /**
    * execute tests on all components in the given execution context.
    */
   test(context: TesterContext): Promise<Tests>;
 }
+
+export type CallbackFn = (testSuite: Tests) => void;

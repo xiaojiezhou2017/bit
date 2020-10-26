@@ -6,10 +6,11 @@ import { ComponentMap } from '@teambit/component';
 import { Workspace } from '@teambit/workspace';
 import chalk from 'chalk';
 import syntaxHighlighter from 'consolehighlighter';
+import { PubSub } from 'graphql-subscriptions';
 
 import { NoTestFilesFound } from './exceptions';
 import { Tester, Tests } from './tester';
-import { TesterOptions } from './tester.main.runtime';
+import { TesterOptions, OnTestsChanged } from './tester.main.runtime';
 import { detectTestFiles } from './utils';
 
 export type TesterDescriptor = {
@@ -42,7 +43,9 @@ export class TesterService implements EnvService<Tests, TesterDescriptor> {
      */
     readonly testsRegex: string,
 
-    private logger: Logger
+    private logger: Logger,
+
+    private pubsub: PubSub
   ) {}
 
   render(env: Environment) {
@@ -89,6 +92,14 @@ export class TesterService implements EnvService<Tests, TesterDescriptor> {
     }, 0);
     if (testCount === 0) throw new NoTestFilesFound(this.testsRegex);
 
+    if (tester.onTestRunComplete) {
+      tester.onTestRunComplete((results) => {
+        this.pubsub.publish(OnTestsChanged, {
+          testsChanged: results,
+        });
+      });
+    }
+
     this.logger.console(`testing ${componentWithTests} components with environment ${chalk.cyan(context.id)}\n`);
 
     const testerContext = Object.assign(context, {
@@ -102,6 +113,4 @@ export class TesterService implements EnvService<Tests, TesterDescriptor> {
 
     return tester.test(testerContext);
   }
-
-  watch() {}
 }

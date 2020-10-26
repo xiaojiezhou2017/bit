@@ -31,7 +31,9 @@ export type UIDeps = [PubsubMain, CLIMain, GraphqlMain, ExpressMain, ComponentMa
 
 export type UIRootRegistry = SlotRegistry<UIRoot>;
 
-export type OnStart = () => void;
+export type OnStart = (opts: OnStartOpts) => void;
+
+export type OnStartOpts = { pattern: string };
 
 export type OnStartSlot = SlotRegistry<OnStart>;
 
@@ -144,7 +146,7 @@ export class UiMain {
   /**
    * create a Bit UI runtime.
    */
-  async createRuntime({ uiRootName, pattern, dev, port, rebuild }: RuntimeOptions) {
+  async createRuntime({ uiRootName, pattern = '', dev, port, rebuild }: RuntimeOptions) {
     const [name, uiRoot] = this.getUi(uiRootName);
     this.componentExtension.setHostPriority(name);
     const uiServer = UIServer.create({
@@ -170,7 +172,7 @@ export class UiMain {
     this.pubsub.pub(UIAspect.id, this.createUiServerStartedEvent(this.config.host, targetPort, uiRoot));
 
     if (uiRoot.postStart) await uiRoot.postStart({ pattern });
-    await this.invokeOnStart();
+    await this.invokeOnStart({ pattern });
 
     // TODO: need to wait until compilation done, then open browser
     // await this.openBrowser(`http://${this.config.host}:${targetPort}`);
@@ -197,8 +199,8 @@ export class UiMain {
     return this;
   }
 
-  private async invokeOnStart(): Promise<void> {
-    const promises = this.onStartSlot.values().map((fn) => fn());
+  private async invokeOnStart(opts: OnStartOpts): Promise<void> {
+    const promises = this.onStartSlot.values().map((fn) => fn(opts));
     await Promise.all(promises);
   }
 

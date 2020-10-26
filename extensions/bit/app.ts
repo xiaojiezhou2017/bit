@@ -118,6 +118,7 @@ async function runCLI() {
   await loadLegacyConfig(config);
   const harmony = await Harmony.load([CLIAspect, BitAspect], MainRuntime.name, config.toObject());
   await harmony.run(async (aspect: Extension, runtime: RuntimeDefinition) => requireAspects(aspect, runtime));
+  // make harmony global
 
   const aspectLoader = harmony.get<AspectLoaderMain>('teambit.bit/aspect-loader');
   aspectLoader.setCoreAspects(Object.values(manifestsMap));

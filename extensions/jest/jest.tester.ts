@@ -1,12 +1,14 @@
 import { readFileSync } from 'fs';
 import { compact } from 'lodash';
 import { runCLI } from 'jest';
-import { Tester, TesterContext, Tests, TestResult, TestsResult, TestsFiles } from '@teambit/tester';
+import { Tester, CallbackFn, TesterContext, Tests, TestResult, TestsResult, TestsFiles } from '@teambit/tester';
 import { TestResult as JestTestResult, AggregatedResult } from '@jest/test-result';
 import { formatResultsErrors } from 'jest-message-util';
 import { ComponentMap, ComponentID } from '@teambit/component';
 import { AbstractVinyl } from 'bit-bin/dist/consumer/component/sources';
 import { JestError } from './error';
+
+let watchPlugin;
 
 export class JestTester implements Tester {
   constructor(readonly id: string, readonly jestConfig: any, readonly icon = '') {}
@@ -93,13 +95,13 @@ export class JestTester implements Tester {
     }, []);
   }
 
-  async test(context: TesterContext): Promise<Tests> {
-    const config: any = {
-      rootDir: context.rootPath,
-      watch: context.watch,
-    };
+  _callback: CallbackFn | undefined;
 
-    if (context.debug) config.runInBand = true;
+  async onTestRunComplete(callback: CallbackFn) {
+    this._callback = callback;
+  }
+
+  async test(context: TesterContext): Promise<Tests> {
     // eslint-disable-next-line
     const jestConfig = require(this.jestConfig);
     const testFiles = context.specFiles.toArray().reduce((acc: string[], [, specs]) => {
@@ -111,6 +113,30 @@ export class JestTester implements Tester {
       testMatch: testFiles,
     });
 
+    const config: any = {
+      rootDir: context.rootPath,
+      watch: context.watch,
+      watchPlugins: [require.resolve('./watch-plugin')],
+    };
+
+    setTimeout(() => {
+      if (watchPlugin) {
+        watchPlugin.onTestRunComplete((suiteInfo) => {
+          if (!this._callback) return;
+          const testResults = suiteInfo.testResults;
+          const componentsWithTests = this.attachTestsToComponent(context, testResults);
+          const componentTestResults = this.buildTestsObj(suiteInfo, componentsWithTests, context, jestConfigWithSpecs);
+          const globalErrors = this.getErrors(testResults);
+
+          this._callback({
+            errors: globalErrors,
+            components: componentTestResults,
+          });
+        });
+      }
+    }, 2000);
+
+    if (context.debug) config.runInBand = true;
     const withEnv = Object.assign(jestConfigWithSpecs, config);
     const testsOutPut = await runCLI(withEnv, [this.jestConfig]);
     const testResults = testsOutPut.results.testResults;
@@ -122,8 +148,11 @@ export class JestTester implements Tester {
       jestConfigWithSpecs
     );
     const globalErrors = this.getErrors(testResults);
+
     return { components: componentTestResults, errors: globalErrors };
   }
+}
 
-  watch() {}
+export function addWatchPlugin(plugin) {
+  watchPlugin = plugin;
 }

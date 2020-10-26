@@ -1,10 +1,9 @@
 import { ComponentFactory } from '@teambit/component';
-import { Schema } from '@teambit/graphql';
+import { GraphqlMain, Schema } from '@teambit/graphql';
 import gql from 'graphql-tag';
+import { TesterMain, OnTestsChanged } from './tester.main.runtime';
 
-import { TesterMain } from './tester.main.runtime';
-
-export function testerSchema(tester: TesterMain): Schema {
+export function testerSchema(tester: TesterMain, graphql: GraphqlMain): Schema {
   return {
     typeDefs: gql`
       extend type ComponentHost {
@@ -28,6 +27,15 @@ export function testerSchema(tester: TesterMain): Schema {
         error: TestError
       }
 
+      type Subscription {
+        testsChanged: TestsChanged
+      }
+
+      type TestsChanged {
+        componentId: String
+        testsResults: TestsResults
+      }
+
       type TestError {
         failureMessage: String
         error: String
@@ -42,6 +50,11 @@ export function testerSchema(tester: TesterMain): Schema {
       }
     `,
     resolvers: {
+      Subscription: {
+        testsChanged: {
+          subscribe: () => graphql.pubsub.asyncIterator(OnTestsChanged),
+        },
+      },
       ComponentHost: {
         getTests: async (host: ComponentFactory, { id }: { id: string }) => {
           const componentId = await host.resolveComponentId(id);

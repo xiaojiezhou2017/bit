@@ -435,6 +435,7 @@ export class Workspace implements ComponentFactory {
     return component;
   }
 
+  // TODO: @david we need to make all trigger methods private. they should not be part of our api.
   async triggerOnComponentChange(id: ComponentID): Promise<OnComponentEventResult[]> {
     this.componentList = new ComponentsList(this.consumer);
     const component = await this.get(id);
